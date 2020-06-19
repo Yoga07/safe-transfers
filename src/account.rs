@@ -31,6 +31,7 @@ impl Account {
         }
     }
 
+    /// Query for the account id.
     pub fn id(&self) -> AccountId {
         self.id
     }

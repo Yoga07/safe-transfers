@@ -27,10 +27,12 @@
 
 mod account;
 mod actor;
+mod keypair;
 mod replica;
 
 pub use self::{
-    account::Account, actor::Actor as TransferActor, replica::Replica as TransferReplica,
+    account::Account, actor::Actor as TransferActor, keypair::ActorKeypair as KeyPair,
+    replica::Replica as TransferReplica,
 };
 
 use safe_nd::{
@@ -154,17 +156,15 @@ pub struct TransferRegistrationSent {
 #[allow(unused)]
 mod test {
     use crate::{
-        actor::Actor, replica::Replica, Account, ActorEvent, ReplicaEvent, ReplicaValidator,
-        TransferInitiated,
+        actor::Actor, replica::Replica, Account, ActorEvent, KeyPair, ReplicaEvent,
+        ReplicaValidator, TransferInitiated,
     };
     use crdts::{
         quickcheck::{quickcheck, TestResult},
         Dot,
     };
     use rand::Rng;
-    use safe_nd::{
-        AccountId, ClientFullId, DebitAgreementProof, Money, PublicKey, SafeKey, Transfer,
-    };
+    use safe_nd::{AccountId, ClientFullId, DebitAgreementProof, Money, PublicKey, Transfer};
     use std::collections::{HashMap, HashSet};
     use threshold_crypto::{PublicKeySet, SecretKey, SecretKeySet, SecretKeyShare};
 
@@ -208,6 +208,8 @@ mod test {
         recipient_index: u8,
     ) -> TestResult {
         // --- Filter ---
+        // todo: 0 >= sender_balance case shall be included in test
+        // todo: sender_index == recipient_index case shall be included in test
         if 0 >= sender_balance
             || 0 >= group_count
             || 2 >= replica_count
@@ -370,8 +372,8 @@ mod test {
         let mut rng = rand::thread_rng();
         let client_full_id = ClientFullId::new_ed25519(&mut rng);
 
-        let client_safe_key = SafeKey::client(client_full_id);
-        let to = client_safe_key.public_id().public_key();
+        let keypair = KeyPair::client(client_full_id);
+        let to = keypair.public_key();
         let mut account = Account::new(to);
 
         let amount = Money::from_nano(balance);
@@ -385,7 +387,7 @@ mod test {
 
         TestAccount {
             account,
-            client_safe_key,
+            keypair,
             replica_group,
         }
     }
@@ -397,7 +399,7 @@ mod test {
 
         let actor = Actor::from_snapshot(
             account.account,
-            account.client_safe_key,
+            account.keypair,
             replica_group.id.clone(),
             Validator {},
         );
@@ -502,7 +504,7 @@ mod test {
     #[derive(Debug, Clone)]
     struct TestAccount {
         account: Account,
-        client_safe_key: SafeKey,
+        keypair: KeyPair,
         replica_group: u8,
     }
 
