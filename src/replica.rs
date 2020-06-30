@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::account::Account;
+use log::{debug, warn};
 use safe_nd::{
     AccountId, DebitAgreementProof, Error, KnownGroupAdded, Money, ReplicaEvent, Result,
     SignatureShare, SignedTransfer, Transfer, TransferPropagated, TransferRegistered,
@@ -14,7 +15,6 @@ use safe_nd::{
 };
 use std::collections::{HashMap, HashSet};
 use threshold_crypto::{PublicKeySet, PublicKeyShare, SecretKeyShare};
-use log::{debug,warn};
 
 /// The Replica is the part of an AT2 system
 /// that forms validating groups, and signs
@@ -147,6 +147,18 @@ impl Replica {
         Ok(KnownGroupAdded { group })
     }
 
+    /// Overwrite older keys and index with the newly churned keys and index
+    pub fn update_keys(
+        &mut self,
+        pub_key_set: PublicKeySet,
+        sec_key_share: SecretKeyShare,
+        index: usize,
+    ) {
+        self.key_index = index;
+        self.peer_replicas = pub_key_set;
+        self.secret_key = sec_key_share;
+    }
+
     /// For now, with test money there is no from account.., money is created from thin air.
     pub fn test_validate_transfer(
         &self,
@@ -192,8 +204,11 @@ impl Replica {
                     debug!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                     debug!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                     debug!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                    debug!("Pending debits at error point: {:?}", self.pending_debits );
-                    return Err(Error::from(format!("out of order msg, previous count: {:?}", value)));
+                    debug!("Pending debits at error point: {:?}", self.pending_debits);
+                    return Err(Error::from(format!(
+                        "out of order msg, previous count: {:?}",
+                        value
+                    )));
                 }
             }
         }
@@ -222,7 +237,7 @@ impl Replica {
         warn!("registering transfer!!!");
         warn!("registering transfer!!!");
         warn!("registering transfer!!!");
-        
+
         // Always verify signature first! (as to not leak any information).
         if !self.verify_registered_proof(debit_proof).is_ok() {
             return Err(Error::InvalidSignature);
@@ -244,8 +259,10 @@ impl Replica {
                         Err(Error::from("Non-sequential operation"))
                     }
                 }
-                Err(_) => Err(Error::from("?????????????????????????????????? register at replica invalid op")), // from this place this code won't happen, but history validates the transfer is actually debits from it's owner.
-                // Err(_) => Err(Error::InvalidOperation), // from this place this code won't happen, but history validates the transfer is actually debits from it's owner.
+                Err(_) => Err(Error::from(
+                    "?????????????????????????????????? register at replica invalid op",
+                )), // from this place this code won't happen, but history validates the transfer is actually debits from it's owner.
+                    // Err(_) => Err(Error::InvalidOperation), // from this place this code won't happen, but history validates the transfer is actually debits from it's owner.
             },
         }
     }
@@ -266,7 +283,7 @@ impl Replica {
             Err(Error::TransferIdExists)
         } else {
             match self.sign_proof(&debit_proof) {
-                Err(_) => Err(Error::InvalidSignature),
+                Err(e) => Err(e),
                 Ok(crediting_replica_sig) => Ok(TransferPropagated {
                     debit_proof: debit_proof.clone(),
                     debiting_replicas,
@@ -308,7 +325,7 @@ impl Replica {
                     Some(account) => account.append(transfer),
                     None => {
                         // Creates if not exists.
-                        let mut account = Account::new(transfer.id.actor);
+                        let mut account = Account::new(transfer.to);
                         account.append(transfer.clone());
                         let _ = self.accounts.insert(transfer.to, account);
                     }
@@ -396,7 +413,6 @@ impl Replica {
         match bincode::serialize(&proof.signed_transfer) {
             Err(_) => Err(Error::NetworkOther("Could not serialise transfer".into())),
             Ok(data) => {
-
                 warn!("verifying registered proof.............");
                 warn!("verifying registered proof.............");
                 warn!("verifying registered proof.............");
@@ -424,6 +440,11 @@ impl Replica {
         match bincode::serialize(&proof.signed_transfer) {
             Err(_) => Err(Error::NetworkOther("Could not serialise transfer".into())),
             Ok(data) => {
+                // Check if it is from our group.
+                let our_key = safe_nd::PublicKey::Bls(self.peer_replicas.public_key());
+                if our_key.verify(&proof.debiting_replicas_sig, &data).is_ok() {
+                    return Ok(our_key);
+                }
                 // Check all known groups of Replicas.
                 for set in &self.other_groups {
                     let debiting_replicas = safe_nd::PublicKey::Bls(set.public_key());

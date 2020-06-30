@@ -6,9 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use log::warn;
 use safe_nd::{AccountId, Error, Money, Result, Transfer, TransferId};
 use std::collections::HashSet;
-use log::warn;
 /// The balance and history of transfers for an account id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Account {
@@ -56,14 +56,19 @@ impl Account {
         warn!("IN IS SEQQQQQQQQQQQQQQQQQQQ");
         warn!("IN IS SEQQQQQQQQQQQQQQQQQQQ");
         warn!("IN IS SEQQQQQQQQQQQQQQQQQQQ");
-        warn!("IN IS SEQQQQQQQQQQQQQQQQQQQ, {:?} {:?}", transfer.id.actor, self.id);
+        warn!(
+            "IN IS SEQQQQQQQQQQQQQQQQQQQ, {:?} {:?}",
+            transfer.id.actor, self.id
+        );
 
         let id = transfer.id;
         if id.actor != self.id {
             Err(Error::from("Operrrrrrrrrrrrration is non-sequential"))
         } else {
-
-            println!("same actor.....and last debit wasssssssssssssss.......... {:?}", self.debits.last());
+            println!(
+                "same actor.....and last debit wasssssssssssssss.......... {:?}",
+                self.debits.last()
+            );
             match self.debits.last() {
                 None => Ok(id.counter == 0), // if no debits have been made, transfer counter must be 0
                 Some(previous) => Ok(previous.id.counter + 1 == id.counter),
