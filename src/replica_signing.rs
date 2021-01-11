@@ -11,7 +11,8 @@ use crate::genesis;
 use sn_data_types::{
     CreditAgreementProof, PublicKey, SignatureShare, SignedCredit, SignedDebit, SignedTransfer,
 };
-use threshold_crypto::{PublicKeySet, PublicKeyShare, SecretKeyShare};
+use threshold_crypto::{PublicKeySet, PublicKeyShare};
+use crate::SignerTrait;
 
 /// The Replica is the part of an AT2 system
 /// that forms validating groups, and signs
@@ -20,12 +21,11 @@ use threshold_crypto::{PublicKeySet, PublicKeyShare, SecretKeyShare};
 /// apply operations that has a valid "debit agreement proof"
 /// from the group, i.e. signatures from a quorum of its peers.
 /// Replicas don't initiate transfers or drive the algo - only Actors do.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplicaSigning {
     /// The public key share of this Replica.
     id: PublicKeyShare,
-    /// Secret key share.
-    secret_key: SecretKeyShare,
+    /// Signer trait defined at upper layers.
+    signer: Box<dyn SignerTrait>,
     /// The index of this Replica key share, in the group set.
     key_index: usize,
     /// The PK set of our peer Replicas.
@@ -36,10 +36,14 @@ pub struct ReplicaSigning {
 
 impl ReplicaSigning {
     /// A new instance
-    pub fn new(secret_key: SecretKeyShare, key_index: usize, peer_replicas: PublicKeySet) -> Self {
-        let id = secret_key.public_key_share();
+    pub fn new(
+        signer: Box<SignerTrait>,
+        id: PublicKeyShare,
+        key_index: usize,
+        peer_replicas: PublicKeySet,
+    ) -> Self {
         Self {
-            secret_key,
+            signer,
             id,
             key_index,
             peer_replicas,
@@ -60,22 +64,23 @@ impl ReplicaSigning {
     /// -----------------------------------------------------------------
 
     ///
-    pub fn try_genesis(&self, balance: u64) -> Result<CreditAgreementProof> {
+    pub async fn try_genesis(&self, balance: u64) -> Result<CreditAgreementProof> {
+        let signer = &self.signer;
         genesis::get_genesis(
             balance,
             PublicKey::Bls(self.peer_replicas.public_key()),
             self.peer_replicas.clone(),
-            self.secret_key.clone(),
-        )
+            signer,
+        ).await
     }
 
     ///
-    pub fn sign_transfer(
+    pub async fn sign_transfer(
         &self,
         signed_transfer: &SignedTransfer,
     ) -> Outcome<(SignatureShare, SignatureShare)> {
-        let replica_debit_sig = self.sign_validated_debit(&signed_transfer.debit)?;
-        let replica_credit_sig = self.sign_validated_credit(&signed_transfer.credit)?;
+        let replica_debit_sig = self.sign_validated_debit(&signed_transfer.debit).await?;
+        let replica_credit_sig = self.sign_validated_credit(&signed_transfer.credit).await?;
         if let Some(rds) = replica_debit_sig {
             if let Some(rcs) = replica_credit_sig {
                 return Outcome::success((rds, rcs));
@@ -85,34 +90,34 @@ impl ReplicaSigning {
     }
 
     ///
-    pub fn sign_validated_debit(&self, debit: &SignedDebit) -> Outcome<SignatureShare> {
+    pub async fn sign_validated_debit(&self, debit: &SignedDebit) -> Outcome<SignatureShare> {
         match bincode::serialize(debit) {
             Err(_) => Err(Error::Serialisation("Could not serialise debit".into())),
             Ok(data) => Outcome::success(SignatureShare {
                 index: self.key_index,
-                share: self.secret_key.sign(data),
+                share: self.signer.sign_with_secret_key_share(&data).await?,
             }),
         }
     }
 
     ///
-    pub fn sign_validated_credit(&self, credit: &SignedCredit) -> Outcome<SignatureShare> {
+    pub async fn sign_validated_credit(&self, credit: &SignedCredit) -> Outcome<SignatureShare> {
         match bincode::serialize(credit) {
             Err(_) => Err(Error::Serialisation("Could not serialise credit".into())),
             Ok(data) => Outcome::success(SignatureShare {
                 index: self.key_index,
-                share: self.secret_key.sign(data),
+                share: self.signer.sign_with_secret_key_share(&data).await?,
             }),
         }
     }
 
     ///
-    pub fn sign_credit_proof(&self, proof: &CreditAgreementProof) -> Outcome<SignatureShare> {
+    pub async fn sign_credit_proof(&self, proof: &CreditAgreementProof) -> Outcome<SignatureShare> {
         match bincode::serialize(proof) {
             Err(_) => Err(Error::Serialisation("Could not serialise proof".into())),
             Ok(data) => Outcome::success(SignatureShare {
                 index: self.key_index,
-                share: self.secret_key.sign(data),
+                share: self.signer.sign_with_secret_key_share(&data).await?,
             }),
         }
     }

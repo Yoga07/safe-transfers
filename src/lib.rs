@@ -48,6 +48,7 @@ use sn_data_types::{
     TransferAgreementProof, TransferValidated,
 };
 use std::collections::HashSet;
+use async_trait::async_trait;
 
 type Result<T> = std::result::Result<T, Error>;
 type Outcome<T> = Result<Option<T>>;
@@ -68,6 +69,13 @@ impl<T> TernaryResult<T> for Outcome<T> {
     fn rejected(error: Error) -> Self {
         Err(error)
     }
+}
+
+/// Trait methods should be defined at the upper layers for signing data with secret keys.
+#[async_trait]
+pub trait SignerTrait {
+    /// Sign the given data
+    async fn sign_with_secret_key_share(&self, data: &[u8]) -> Result<threshold_crypto::SignatureShare>;
 }
 
 /// A received credit, contains the CreditAgreementProof from the sender Replicas,
@@ -180,6 +188,7 @@ pub struct TransferRegistrationSent {
     transfer_proof: TransferAgreementProof,
 }
 
+/*
 #[allow(unused)]
 mod test {
     use crate::{
@@ -859,3 +868,4 @@ mod test {
         keys: Vec<(SecretKeyShare, usize)>,
     }
 }
+ */

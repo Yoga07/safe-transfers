@@ -22,15 +22,7 @@ use sn_data_types::{
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use threshold_crypto::PublicKeySet;
-
-/// A signature share, with its index in the combined collection.
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct SecretKeyShare {
-    /// Index in the combined collection.
-    pub index: usize,
-    /// Replica signature over the transfer cmd.
-    pub secret_key: threshold_crypto::SecretKeyShare,
-}
+use crate::SignerTrait;
 
 /// The Actor is the part of an AT2 system
 /// that initiates transfers, by requesting Replicas
@@ -39,7 +31,7 @@ pub struct SecretKeyShare {
 #[derive(Debug, Clone)]
 pub struct Actor<V: ReplicaValidator> {
     id: WalletOwner,
-    keypair: Arc<Keypair>,
+    signer: dyn SignerTrait,
     /// Set of all transfers impacting a given identity
     wallet: Wallet,
     /// Ensures that the actor's transfer

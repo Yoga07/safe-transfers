@@ -6,11 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::{Error, Result};
+use crate::{Error, Result, SignerTrait};
 use sn_data_types::{Credit, CreditAgreementProof, Money, PublicKey, SignedCredit};
 use std::collections::BTreeMap;
-use threshold_crypto::{PublicKeySet, SecretKeySet, SecretKeyShare};
+use threshold_crypto::{PublicKeySet, SecretKeySet, SignatureShare};
 
+/*
 /// Produces a genesis balance for a new network.
 #[allow(unused)]
 pub fn get_random_genesis(balance: u64, id: PublicKey) -> Result<CreditAgreementProof> {
@@ -30,13 +31,14 @@ pub fn get_random_genesis(balance: u64, id: PublicKey) -> Result<CreditAgreement
         bls_secret_key.secret_key_share(threshold),
     )
 }
+ */
 
 /// Produces a genesis balance for a new network.
-pub fn get_genesis(
+pub async fn get_genesis(
     balance: u64,
     id: PublicKey,
     peer_replicas: PublicKeySet,
-    secret_key_share: SecretKeyShare,
+    signer: &Box<dyn SignerTrait>,
 ) -> Result<CreditAgreementProof> {
     let credit = Credit {
         id: Default::default(),
@@ -50,8 +52,8 @@ pub fn get_genesis(
     let serialised_credit = bincode::serialize(&credit)
         .map_err(|_| Error::Serialisation("Could not serialise credit".to_string()))?;
 
-    let mut credit_sig_shares = BTreeMap::new();
-    let credit_sig_share = secret_key_share.sign(serialised_credit);
+    let mut credit_sig_shares: BTreeMap<i32, SignatureShare> = BTreeMap::new();
+    let credit_sig_share: SignatureShare = signer.sign_with_secret_key_share(&serialised_credit).await?;
     let _ = credit_sig_shares.insert(0, credit_sig_share);
 
     // Combine shares to produce the main signature.
@@ -71,8 +73,8 @@ pub fn get_genesis(
     let serialised_credit = bincode::serialize(&signed_credit)
         .map_err(|_| Error::Serialisation("Could not serialise signed_credit".to_string()))?;
 
-    let mut credit_sig_shares = BTreeMap::new();
-    let credit_sig_share = secret_key_share.sign(serialised_credit);
+    let mut credit_sig_shares: BTreeMap<i32, SignatureShare> = BTreeMap::new();
+    let credit_sig_share: SignatureShare = signer.sign_with_secret_key_share(&serialised_credit).await?;
     let _ = credit_sig_shares.insert(0, credit_sig_share);
 
     let debiting_replicas_sig = sn_data_types::Signature::Bls(
